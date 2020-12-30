@@ -1,0 +1,19 @@
+{
+	"name": "mwsjournal",
+	"version": "1.0.0",
+	"description": "Journal Desktop App",
+	"main": "main.js",
+	"scripts": {
+		"start": "electron ."
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Franky-Lim24/mwsjournal.git"
+	},
+	"author": "Franky",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/Franky-Lim24/mwsjournal/issues"
+	},
+	"homepage": "https://github.com/Franky-Lim24/mwsjournal#readme"
+}
