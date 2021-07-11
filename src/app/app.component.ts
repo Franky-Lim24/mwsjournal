@@ -1,10 +1,13 @@
+import { DatePipe, CurrencyPipe } from '@angular/common';
 import { Component } from '@angular/core';
 
 @Component({
-  selector: 'app-root',
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
+    selector: 'app-root',
+    templateUrl: './app.component.html',
+    styleUrls: ['./app.component.css'],
+    providers: [DatePipe, CurrencyPipe],
 })
 export class AppComponent {
-  title = 'mwsjournal';
+    title = 'mwsjournal';
+    constructor() {}
 }
