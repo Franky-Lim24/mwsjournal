@@ -1,9 +1,9 @@
 <div
     class="tabItems"
     style="
-        height: 100%;
-        align-items: center;
         display: flex;
+        flex-direction: column;
+        height: 100%;
         justify-content: center;
     "
 >
@@ -21,7 +21,7 @@
                     Tanggal
                 </th>
                 <td mat-cell *matCellDef="let element">
-                    {{ element.tanggal }}
+                    {{ element.date }}
                 </td>
             </ng-container>
 
@@ -38,5 +38,16 @@
             <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
             <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
         </table>
+    </div>
+    <div class="row" style="justify-content: flex-start; margin-bottom: 12px">
+        <button
+            class="jumlahPemasukan"
+            mat-raised-button
+            color="accent"
+            style="margin-left: 10% !important; margin-right: 0 !important"
+            (click)="changeData()"
+        >
+            Refresh
+        </button>
     </div>
 </div>

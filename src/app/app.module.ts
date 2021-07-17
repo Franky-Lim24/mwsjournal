@@ -13,6 +13,8 @@ import { PengeluaranComponent } from './pengeluaran/pengeluaran.component';
 import { StatusComponent } from './status/status.component';
 import { ChartComponent } from './chart/chart.component';
 import { HttpClientModule } from '@angular/common/http';
+import { ModalComponent } from './modal/modal.component';
+import { NgxChartsModule } from '@swimlane/ngx-charts';
 
 @NgModule({
     declarations: [
@@ -23,6 +25,7 @@ import { HttpClientModule } from '@angular/common/http';
         PengeluaranComponent,
         StatusComponent,
         ChartComponent,
+        ModalComponent,
     ],
     imports: [
         BrowserModule,
@@ -31,6 +34,7 @@ import { HttpClientModule } from '@angular/common/http';
         MaterialModule,
         FormsModule,
         HttpClientModule,
+        NgxChartsModule,
     ],
     providers: [
         { provide: MAT_DATE_LOCALE, useValue: 'en-GB' },

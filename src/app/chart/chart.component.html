@@ -1,1 +1,39 @@
-<div class="tabItems"></div>
+<div
+    class="tabItems"
+    style="
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        justify-content: center;
+    "
+>
+    <div class="row" style="justify-content: center">
+        <ngx-charts-line-chart
+            [view]="view"
+            [legend]="legend"
+            [showXAxisLabel]="showXAxisLabel"
+            [showYAxisLabel]="showYAxisLabel"
+            [xAxis]="xAxis"
+            [yAxis]="yAxis"
+            [xAxisLabel]="xAxisLabel"
+            [yAxisLabel]="yAxisLabel"
+            [timeline]="timeline"
+            [results]="multi"
+            (select)="onSelect($event)"
+            (activate)="onActivate($event)"
+            (deactivate)="onDeactivate($event)"
+        >
+        </ngx-charts-line-chart>
+    </div>
+    <div class="row" style="justify-content: flex-start; margin-bottom: 12px">
+        <button
+            class="jumlahPemasukan"
+            mat-raised-button
+            color="accent"
+            style="margin-left: 10% !important; margin-right: 0 !important"
+            (click)="changeData()"
+        >
+            Refresh
+        </button>
+    </div>
+</div>

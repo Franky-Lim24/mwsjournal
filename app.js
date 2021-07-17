@@ -1,6 +1,7 @@
 var express = require("express");
 var app = express();
 var fs = require("fs");
+var moment = require("moment");
 app.use(express.json());
 
 const path = "data";
@@ -63,7 +64,7 @@ app.get("/api/pemasukan", (req, res) => {
                 }/${today.getDate()}.json`
             )
         ) {
-            res.status(200).send([]);
+            res.status(200).send([[], { tunai: 0 }]);
         } else {
             var data = fs.readFileSync(
                 `${pathPemasukan}/${today.getFullYear()}/${
@@ -80,7 +81,7 @@ app.get("/api/pemasukan", (req, res) => {
 app.post("/api/pemasukan", (req, res) => {
     try {
         const today = new Date(req.body["date"]);
-        const data = req.body["data"];
+        const data = [req.body["data"], { tunai: req.body["tunaiPemasukan"] }];
 
         if (!fs.existsSync(`${pathPemasukan}/${today.getFullYear()}`)) {
             fs.mkdirSync(`${pathPemasukan}/${today.getFullYear()}`);
@@ -112,8 +113,7 @@ app.post("/api/pemasukan", (req, res) => {
 
 app.get("/api/pengeluaran", (req, res) => {
     try {
-        const reqData = req.body["date"];
-        const today = new Date(reqData);
+        const today = new Date(req.query["date"]);
 
         if (
             !fs.existsSync(
@@ -122,7 +122,7 @@ app.get("/api/pengeluaran", (req, res) => {
                 }/${today.getDate()}.json`
             )
         ) {
-            res.status(200).send([]);
+            res.status(200).send([[], { tunai: 0 }]);
         } else {
             var data = fs.readFileSync(
                 `${pathPengeluaran}/${today.getFullYear()}/${
@@ -138,12 +138,12 @@ app.get("/api/pengeluaran", (req, res) => {
 
 app.post("/api/pengeluaran", async (req, res) => {
     try {
-        const reqData = req.body;
-        const today = new Date(reqData["tgl"]);
-
+        let reqData = req.body;
+        let today = moment(reqData["tgl"], "DD MMM YYYY").toDate();
         let newData = {};
         newData["nominal"] = reqData["nominal"];
         newData["status"] = false;
+        newData["gudang"] = false;
         newData["bank"] = reqData["bank"];
         newData["cek"] = reqData["cek"];
         if (!fs.existsSync(`${pathPengeluaran}/${today.getFullYear()}`)) {
@@ -173,7 +173,7 @@ app.post("/api/pengeluaran", async (req, res) => {
                 `${pathPengeluaran}/${today.getFullYear()}/${
                     monthNames[today.getMonth()]
                 }/${today.getDate()}.json`,
-                JSON.stringify([newData])
+                JSON.stringify([[newData], { tunai: 0 }])
             );
         } else {
             fs.readFile(
@@ -182,7 +182,15 @@ app.post("/api/pengeluaran", async (req, res) => {
                 }/${today.getDate()}.json`,
                 function (err, data) {
                     var json = JSON.parse(data);
-                    json.push(newData);
+                    for (let x = 0; x < json[0].length; x++) {
+                        if (
+                            json[0][x]["bank"] == newData["bank"] &&
+                            json[0][x]["cek"] == newData["cek"]
+                        ) {
+                            json[0].splice(x, 1);
+                        }
+                    }
+                    json[0].push(newData);
                     fs.writeFile(
                         `${pathPengeluaran}/${today.getFullYear()}/${
                             monthNames[today.getMonth()]
@@ -195,7 +203,7 @@ app.post("/api/pengeluaran", async (req, res) => {
                 }
             );
         }
-        res.status(201).send(newData);
+        res.status(201).send();
     } catch (err) {
         res.status(400).send(err);
     }
@@ -205,13 +213,14 @@ app.put("/api/pengeluaran", (req, res) => {
     try {
         const date = req.body["date"];
         const data = req.body["data"];
+        const tunai = req.body["tunai"];
         const today = new Date(date);
 
         fs.writeFileSync(
             `${pathPengeluaran}/${today.getFullYear()}/${
                 monthNames[today.getMonth()]
             }/${today.getDate()}.json`,
-            JSON.stringify(data)
+            JSON.stringify([data, { tunai }])
         );
         res.status(200).send();
     } catch (err) {
@@ -230,14 +239,16 @@ app.post("/api/status", async (req, res) => {
         } else {
             fs.readFile(`${pathStatus}/status.json`, function (err, data) {
                 var json = JSON.parse(data);
-                json.push({ date: date, status: "Tidak Lengkap" });
-                fs.writeFile(
-                    `${pathStatus}/status.json`,
-                    JSON.stringify(json),
-                    function (err) {
-                        if (err) throw err;
-                    }
-                );
+                if (json.filter((item) => item["date"] === date).length === 0) {
+                    json.push({ date: date, status: "Tidak Lengkap" });
+                    fs.writeFile(
+                        `${pathStatus}/status.json`,
+                        JSON.stringify(json),
+                        function (err) {
+                            if (err) throw err;
+                        }
+                    );
+                }
             });
         }
         res.status(201).send();
@@ -261,28 +272,35 @@ app.get("/api/status", (req, res) => {
 
 app.put("/api/status", async (req, res) => {
     try {
-        var date = req.body["date"];
+        var date = moment(req.body["date"]).format("DD MMM YYYY");
         var status = req.body["status"];
         if (status) {
-            var result = json.filter((stat) => stat["date"] !== date);
-            fs.writeFile(
-                `${pathStatus}/status.json`,
-                JSON.stringify(result),
-                function (err) {
-                    if (err) throw err;
-                }
-            );
-        } else {
-            fs.readFile(`${pathPengeluaran}/status.json`, function (err, data) {
+            fs.readFile(`${pathStatus}/status.json`, function (err, data) {
                 var json = JSON.parse(data);
-                json.push({ date: date, status: "Tidak Lengkap" });
-                fs.writeFile(
-                    `${pathPengeluaran}/status.json`,
-                    JSON.stringify(json),
-                    function (err) {
-                        if (err) throw err;
-                    }
-                );
+                if (json.filter((item) => item["date"] === date).length !== 0) {
+                    json = json.filter((item) => item["date"] !== date);
+                    fs.writeFile(
+                        `${pathStatus}/status.json`,
+                        JSON.stringify(json),
+                        function (err) {
+                            if (err) throw err;
+                        }
+                    );
+                }
+            });
+        } else {
+            fs.readFile(`${pathStatus}/status.json`, function (err, data) {
+                var json = JSON.parse(data);
+                if (json.filter((item) => item["date"] === date).length === 0) {
+                    json.push({ date: date, status: "Tidak Lengkap" });
+                    fs.writeFile(
+                        `${pathStatus}/status.json`,
+                        JSON.stringify(json),
+                        function (err) {
+                            if (err) throw err;
+                        }
+                    );
+                }
             });
         }
         res.status(200).send();
@@ -291,34 +309,34 @@ app.put("/api/status", async (req, res) => {
     }
 });
 
-app.post("/api/chart", async (req, res) => {
+app.put("/api/chart", async (req, res) => {
     try {
-        var month = monthNames[new Date().getMonth];
+        var month = monthNames[new Date().getMonth()];
         var year = new Date().getFullYear();
         var newData = req.body["data"];
-
         if (!fs.existsSync(`${pathChart}/${year}`)) {
             fs.mkdirSync(`${pathChart}/${year}`);
         }
         if (!fs.existsSync(`${pathChart}/${year}/chart.json`)) {
             fs.writeFileSync(
                 `${pathChart}/${year}/chart.json`,
-                JSON.stringify([{ month: month, data: data }])
+                JSON.stringify([{ month: month, profit: newData }])
             );
         } else {
             fs.readFile(
                 `${pathChart}/${year}/chart.json`,
                 function (err, data) {
                     var json = JSON.parse(data);
-                    json.map((item) => {
-                        if (item["month"] === month) {
-                            item["data"] = item["data"] + newData;
-                        } else {
-                            item["data"] = newData;
+                    let found = false;
+                    for (let x = 0; x < json.length; x++) {
+                        if (json[x]["month"] === month) {
+                            json[x]["profit"] += newData;
+                            found = true;
                         }
-                        return item;
-                    });
-
+                    }
+                    if (!found) {
+                        json.push({ month, profit: newData });
+                    }
                     fs.writeFile(
                         `${pathChart}/${year}/chart.json`,
                         JSON.stringify(json),
@@ -337,12 +355,27 @@ app.post("/api/chart", async (req, res) => {
 
 app.get("/api/chart", (req, res) => {
     try {
-        var year = new Date().getFullYear();
+        let year = new Date().getFullYear();
+        let month = new Date().getMonth();
+        let remaining = 12 - month;
+        let remainingData = [];
         if (!fs.existsSync(`${pathChart}/${year}/chart.json`)) {
             res.status(404).send([]);
         } else {
-            var data = fs.readFileSync(`${pathChart}/${year}/chart.json`);
-            res.status(200).send(JSON.parse(data));
+            if (remaining > 0) {
+                if (fs.existsSync(`${pathChart}/${year - 1}/chart.json`)) {
+                    remainingData = JSON.parse(
+                        fs.readFileSync(`${pathChart}/${year - 1}/chart.json`)
+                    );
+                    remainingData = remainingData.slice(
+                        Math.max(remainingData.length - remaining, 0)
+                    );
+                }
+            }
+            var data = JSON.parse(
+                fs.readFileSync(`${pathChart}/${year}/chart.json`)
+            );
+            res.status(200).send([...remainingData, ...data]);
         }
     } catch (err) {
         res.status(400).send(err);

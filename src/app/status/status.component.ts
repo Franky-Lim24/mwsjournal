@@ -1,8 +1,11 @@
-import { CurrencyPipe, DatePipe } from '@angular/common';
+import { CurrencyPipe } from '@angular/common';
 import { AfterViewInit, Component, OnInit, ViewChild } from '@angular/core';
 import { MatSort } from '@angular/material/sort';
 import { MatTableDataSource } from '@angular/material/table';
+import { Subscription } from 'rxjs';
+import { StatusService } from './status.service';
 import * as moment from 'moment';
+import { Status } from './status.model';
 
 @Component({
     selector: 'app-status',
@@ -13,16 +16,20 @@ export class StatusComponent implements AfterViewInit, OnInit {
     @ViewChild(MatSort) sort: MatSort;
 
     ngAfterViewInit() {
-        this.dataSource.sort = this.sort;
+        this.changeData();
     }
-    displayedColumns: string[] = ['tanggal', 'status'];
-    dataSource = new MatTableDataSource(dataStatus);
-    formattedAmount;
 
-    constructor(private currencyPipe: CurrencyPipe) {}
+    displayedColumns: string[] = ['tanggal', 'status'];
+    dataSource = new MatTableDataSource();
+    data: Status[];
+    formattedAmount;
+    dataSub: Subscription;
+    constructor(
+        private currencyPipe: CurrencyPipe,
+        private statusService: StatusService
+    ) {}
 
     transformEle(element) {
-        console.log(element);
         this.formattedAmount = this.currencyPipe.transform(
             this.formattedAmount,
             'IDR',
@@ -31,41 +38,19 @@ export class StatusComponent implements AfterViewInit, OnInit {
         element.target.value = this.formattedAmount;
     }
 
+    changeData() {
+        this.dataSub = this.statusService.getStatus().subscribe(
+            (res: Status[]) => {
+                this.data = res.filter((item) => {
+                    return moment(item['date']).toDate() <= new Date();
+                });
+                this.dataSource.data = this.data;
+                this.dataSource.sort = this.sort;
+                this.dataSub.unsubscribe();
+            },
+            (err) => console.log(err)
+        );
+    }
+
     ngOnInit(): void {}
 }
-
-export interface Status {
-    tanggal: string;
-    status: string;
-}
-
-const dataStatus: Status[] = [
-    {
-        tanggal: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        status: 'Tidak Lengkap',
-    },
-    {
-        tanggal: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        status: 'Tidak Lengkap',
-    },
-    {
-        tanggal: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        status: 'Tidak Lengkap',
-    },
-    {
-        tanggal: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        status: 'Tidak Lengkap',
-    },
-    {
-        tanggal: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        status: 'Tidak Lengkap',
-    },
-    {
-        tanggal: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        status: 'Tidak Lengkap',
-    },
-    {
-        tanggal: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        status: 'Tidak Lengkap',
-    },
-];

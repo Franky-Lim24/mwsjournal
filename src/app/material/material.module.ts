@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialogModule } from '@angular/material/dialog';
 
 const MaterialComponents = [
     MatTabsModule,
@@ -19,6 +20,7 @@ const MaterialComponents = [
     MatNativeDateModule,
     MatCheckboxModule,
     MatButtonModule,
+    MatDialogModule,
 ];
 
 @NgModule({

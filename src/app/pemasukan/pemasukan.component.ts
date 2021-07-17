@@ -5,6 +5,7 @@ import {
     ElementRef,
     OnDestroy,
     OnInit,
+    Output,
     ViewChild,
 } from '@angular/core';
 import { MatSort } from '@angular/material/sort';
@@ -12,7 +13,11 @@ import { MatTableDataSource } from '@angular/material/table';
 import { Subscription } from 'rxjs';
 import { Pemasukan } from './pemasukan.model';
 import { PemasukanService } from './pemasukan.service';
-import * as moment from 'moment';
+import { MatDialog } from '@angular/material/dialog';
+import { ModalComponent } from '../modal/modal.component';
+import { PengeluaranService } from '../pengeluaran/pengeluaran.service';
+import { StatusService } from '../status/status.service';
+import { ChartService } from '../chart/chart.service';
 
 @Component({
     selector: 'app-pemasukan',
@@ -21,19 +26,32 @@ import * as moment from 'moment';
 })
 export class PemasukanComponent implements OnInit, AfterViewInit, OnDestroy {
     @ViewChild('tunaiPemasukan') tunaiPemasukan: ElementRef;
+    @ViewChild('tanggalInput') tanggalInput: ElementRef;
+    @ViewChild('rowSync') rowSync: ElementRef;
     @ViewChild(MatSort) sort: MatSort;
 
     displayedColumns: string[] = ['bank', 'cek', 'tgl', 'nominal'];
-    data: Pemasukan[] = dataPemasukan;
+    data: Pemasukan[];
     formattedAmount;
     jumlahPemasukan = 0;
-    dataSource = new MatTableDataSource(this.data);
     dataSub: Subscription;
+    dataSource: any = new MatTableDataSource();
+    editMode: boolean;
+    postSub: Subscription;
+    timer = null;
+    pengeluaranSub: Subscription;
+    statusSub: Subscription;
+    chartSub: Subscription;
+    tempJumlah: number = 0;
 
     constructor(
         private datePipe: DatePipe,
         private currencyPipe: CurrencyPipe,
-        private pemasukanService: PemasukanService
+        private pemasukanService: PemasukanService,
+        public dialog: MatDialog,
+        private pengeluaranService: PengeluaranService,
+        private statusService: StatusService,
+        private chartService: ChartService
     ) {}
 
     getToday() {
@@ -43,6 +61,13 @@ export class PemasukanComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     transformAmount(element) {
+        if (typeof this.formattedAmount === 'string') {
+            let checker = this.formattedAmount.includes('.00');
+            this.formattedAmount = this.formattedAmount.replace(/\D/g, '');
+            if (checker) {
+                this.formattedAmount = this.formattedAmount / 100;
+            }
+        }
         this.formattedAmount = this.currencyPipe.transform(
             this.formattedAmount,
             'IDR',
@@ -52,123 +77,173 @@ export class PemasukanComponent implements OnInit, AfterViewInit, OnDestroy {
         element.target.value = this.formattedAmount;
     }
 
+    transformElement(element) {
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
+        this.timer = setTimeout(() => {
+            let amount = element.target.innerText;
+            if (typeof amount === 'string') {
+                let checker = amount.includes('.00');
+                amount = amount.replace(/\D/g, '');
+                if (checker) {
+                    amount = amount / 100;
+                }
+            }
+            amount = this.currencyPipe.transform(amount, 'IDR', 'Rp ');
+            element.target.innerText = amount;
+            this.syncData();
+        }, 1000);
+    }
+
     calcPemasukan() {
-        let tunai = Number(
-            this.tunaiPemasukan.nativeElement.value.replace(/[^0-9.-]+/g, '')
-        );
-        let cek = document.querySelectorAll('.nominalPemasukan');
+        let tunai = !!this.tunaiPemasukan.nativeElement.value
+            ? Number(
+                  this.tunaiPemasukan.nativeElement.value.replace(
+                      /[^0-9.-]+/g,
+                      ''
+                  )
+              )
+            : 0;
+        let cek = this.dataSource.filteredData;
         for (let x = 0; x < cek.length; x++) {
-            let cekItem = cek[x].innerHTML.split(' ')[2];
-            let number = Number(cekItem.replace(/[^0-9.-]+/g, ''));
-            tunai += number;
+            tunai += cek[x]['nominal'];
         }
         this.jumlahPemasukan = tunai;
     }
 
-    ngAfterViewInit() {
-        this.dataSource.sort = this.sort;
+    syncData() {
+        let rows = this.rowSync.nativeElement.children[0].children[1].children;
+        this.data = [];
+        for (let x = 0; x < rows.length; x++) {
+            this.data.push({
+                bank: rows[x].children[0].innerText,
+                cek: rows[x].children[1].innerText,
+                tgl: rows[x].children[2].innerText,
+                nominal: rows[x].children[3].innerText.replace(/\D/g, '') / 100,
+            });
+        }
+        this.dataSource.data = this.data;
+        this.calcPemasukan();
     }
 
-    ngOnInit(): void {
-        this.dataSub = this.pemasukanService
-            .getPemasukan(
-                new Date(
-                    'Sun Jul 11 2021 10:10:18 GMT+0800 (Singapore Standard Time)'
-                )
-            )
+    ngAfterViewInit() {
+        this.changeData();
+    }
+
+    saveData() {
+        this.syncData();
+        this.dataSource.data = this.dataSource.filteredData.filter(
+            (item) => item.bank !== ''
+        );
+        let date = this.tanggalInput.nativeElement.value;
+        date = date.split('/');
+        date = date[1] + '/' + date[0] + '/' + date[2];
+        let tunai = !!this.tunaiPemasukan
+            ? Number(
+                  this.tunaiPemasukan.nativeElement.value.replace(
+                      /[^0-9.-]+/g,
+                      ''
+                  )
+              )
+            : 0;
+        this.postSub = this.pemasukanService
+            .postPemasukan(new Date(date), this.dataSource.filteredData, tunai)
             .subscribe(
                 (res) => {
-                    console.log(res);
+                    this.postSub.unsubscribe();
+                },
+                (err) => {
+                    console.log(err);
+                    this.openDialog('Error!');
+                }
+            );
+        let filteredData = this.dataSource.filteredData.slice();
+        for (let x = 0; x < filteredData.length; x++) {
+            let pengeluaranData = filteredData[x];
+            this.pengeluaranSub = this.pengeluaranService
+                .postPengeluaran(pengeluaranData)
+                .subscribe(
+                    (res) => {
+                        this.pengeluaranSub.unsubscribe();
+                    },
+                    (err) => console.log(err)
+                );
+            this.statusSub = this.statusService
+                .postStatus(pengeluaranData['tgl'])
+                .subscribe(
+                    (res) => this.statusSub.unsubscribe(),
+                    (err) => console.log(err)
+                );
+        }
+        this.chartSub = this.chartService
+            .putChart(this.jumlahPemasukan - this.tempJumlah)
+            .subscribe(
+                (res) => this.chartSub.unsubscribe(),
+                (err) => console.log(err)
+            );
+        this.tempJumlah = this.jumlahPemasukan;
+        this.openDialog('Saved!');
+    }
+
+    openDialog(message: string): void {
+        const dialogRef = this.dialog.open(ModalComponent, {
+            width: '300px',
+            data: {
+                message: message,
+            },
+        });
+
+        dialogRef.afterClosed().subscribe((result) => {});
+    }
+
+    changeData() {
+        let date = this.tanggalInput.nativeElement.value;
+        date = date.split('/');
+        date = date[1] + '/' + date[0] + '/' + date[2];
+        this.dataSub = this.pemasukanService
+            .getPemasukan(new Date(date))
+            .subscribe(
+                (res: [Pemasukan[], { tunai: number }]) => {
+                    this.data = res[0];
+                    this.dataSource.data = this.data;
+                    this.dataSource.sort = this.sort;
+                    this.formattedAmount = res[1]['tunai'];
+                    let blur = new MouseEvent('blur');
+                    this.tunaiPemasukan.nativeElement.dispatchEvent(blur);
+                    this.editMode = false;
+                    this.dataSub.unsubscribe();
+                    this.calcPemasukan();
+                    this.tempJumlah = this.jumlahPemasukan;
                 },
                 (err) => {
                     console.log(err);
                 }
             );
     }
+
+    addRow() {
+        this.data = this.dataSource.data.slice();
+        this.data.push({
+            bank: '',
+            cek: '',
+            tgl: '',
+            nominal: 0,
+        });
+        this.dataSource.data = this.data;
+    }
+
+    ngOnInit(): void {
+        //this.changeData();
+    }
+
     ngOnDestroy() {
         if (this.dataSub) {
             this.dataSub.unsubscribe();
         }
+        if (this.postSub) {
+            this.postSub.unsubscribe();
+        }
     }
 }
-
-// const dataPemasukan = [
-//     { bank: 'Hydrogen', cek: 'Hydrogen', tgl: 'hi', nominal: 120001 },
-//     { bank: 'Hydrogen', cek: 'Helium', tgl: 'hi', nominal: 120003 },
-//     { bank: 'Hydrogen', cek: 'Lithium', tgl: 'hi', nominal: 120002 },
-//     {
-//         bank: 'Hydrogen',
-//         cek: 'Beryllium',
-//         tgl: 'hi',
-//         nominal: 120000,
-//     },
-//     { bank: 'Hydrogen', cek: 'Boron', tgl: 'hi', nominal: 120000 },
-//     { bank: 'Hydrogen', cek: 'Carbon', tgl: 'hi', nominal: 120000 },
-//     { bank: 'Hydrogen', cek: 'Nitrogen', tgl: 'hi', nominal: 120000 },
-//     { bank: 'Hydrogen', cek: 'Oxygen', tgl: 'hi', nominal: 120000 },
-//     { bank: 'Hydrogen', cek: 'Fluorine', tgl: 'hi', nominal: 120000 },
-//     { bank: 'Hydrogen', cek: 'Neon', tgl: 'hi', nominal: 120000 },
-// ];
-
-const dataPemasukan = [
-    {
-        bank: 'Hydrogen',
-        cek: 'Hydrogen',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120001,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Helium',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120003,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Lithium',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120002,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Beryllium',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120000,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Boron',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120000,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Carbon',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120000,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Nitrogen',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120000,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Oxygen',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120000,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Fluorine',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120000,
-    },
-    {
-        bank: 'Hydrogen',
-        cek: 'Neon',
-        tgl: moment(new Date('2020-12-13')).format('D MMM YYYY'),
-        nominal: 120000,
-    },
-];
